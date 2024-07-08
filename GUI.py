@@ -18,7 +18,7 @@ def load_model():
     loaded_model = model_from_json(loaded_model_json)
 
     # Load weights into new model
-    loaded_model.load_weights("saved_models/Emotion_Model.h5")
+    loaded_model.load_weights("emotion_model.h5")
 
     # Compile model
     opt = keras.optimizers.Adam()
