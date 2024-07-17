@@ -11,7 +11,7 @@ Pip: `pip install -r pip_env.txt`
 
 Conda: `conda env create -f conda_env.yml`
 
-### Download the Datasets and place them in the project directory:
+### Download the Datasets folders and place them in the project directory:
 https://drive.google.com/drive/folders/106hnKl3NDEWPoWEyGzNP5MqhDY6uNtgy?usp=sharing, https://drive.google.com/drive/folders/1bX0OFHVLcD1pGGr7VQ51t0S60rPbHoOH?usp=sharing, https://drive.google.com/drive/folders/1mfawCcxDbZzXs5Fxl-a0I6UQP_qvEdsA?usp=sharing, https://drive.google.com/drive/folders/1mpiEDnb_nDeotMQMde2v9vAQhmvwUUZ4?usp=sharing, https://drive.google.com/drive/folders/1qOsKOG0WRsv3UwkbHP55-8VCN__FRyNz?usp=sharing
 
 ## Running the GUI
