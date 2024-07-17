@@ -3,7 +3,7 @@ This Streamlit application enables emotion prediction from audio files, specific
 
 ### Install dependencies:
 
-Pip: `pip install pip_env.txt`
+Pip: `pip install -r pip_env.txt`
 
 Conda: `conda env create -f conda_env.yml`
 
