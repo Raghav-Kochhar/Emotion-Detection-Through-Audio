@@ -16,16 +16,13 @@ from functools import partial
 import soundfile as sf
 import librosa
 
-# Set up logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-# Set random seeds for reproducibility
 torch.manual_seed(42)
 np.random.seed(42)
 
-# Check if CUDA is available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logging.info(f"Using device: {device}")
 
@@ -38,19 +35,15 @@ def process_audio(row, base_path, max_length, mfcc_transform):
             logging.error(f"Audio file not found: {audio_path}")
             return None
 
-        # Use librosa for faster audio loading
         audio, sr = librosa.load(audio_path, sr=16000, duration=max_length)
 
-        # Ensure consistent length
         if len(audio) > 16000 * max_length:
             audio = audio[: 16000 * max_length]
         else:
             audio = np.pad(audio, (0, 16000 * max_length - len(audio)))
 
-        # Convert to tensor
         audio = torch.from_numpy(audio).float().unsqueeze(0)
 
-        # Extract MFCC features
         mfcc = mfcc_transform(audio)
 
         return mfcc.squeeze(0).transpose(0, 1).numpy()
@@ -81,14 +74,12 @@ class AudioDataset(Dataset):
         self.max_length = max_length
         self.label_encoder = LabelEncoder()
 
-        # Filter for female voices and encode labels
         self.df = self.df[self.df["labels"].str.startswith("female")]
         self.df["emotion"] = self.df["labels"].apply(lambda x: x.split("_")[1])
         self.df["encoded_emotion"] = self.label_encoder.fit_transform(
             self.df["emotion"]
         )
 
-        # Initialize MFCC transform
         self.mfcc_transform = torchaudio.transforms.MFCC(
             sample_rate=16000,
             n_mfcc=40,
@@ -98,7 +89,6 @@ class AudioDataset(Dataset):
         logging.info("Starting preprocessing of dataset")
         self.preprocessed_data = self.preprocess_dataset()
 
-        # Ensure df and preprocessed_data have the same length
         self.df = self.df.iloc[: len(self.preprocessed_data)]
 
         logging.info(
@@ -173,12 +163,10 @@ def train_model(
         train_correct = 0
         train_total = 0
 
-        # Use tqdm for the training loop
         train_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Train]")
         for inputs, labels in train_bar:
             inputs, labels = inputs.to(device), labels.to(device)
 
-            # Ensure labels are of type Long
             labels = labels.long()
 
             optimizer.zero_grad()
@@ -192,7 +180,6 @@ def train_model(
             train_total += labels.size(0)
             train_correct += (predicted == labels).sum().item()
 
-            # Update the progress bar
             train_bar.set_postfix(
                 {
                     "loss": f"{train_loss/train_total:.4f}",
@@ -208,7 +195,6 @@ def train_model(
         val_correct = 0
         val_total = 0
 
-        # Use tqdm for the validation loop
         val_bar = tqdm(val_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Val]")
         with torch.no_grad():
             for inputs, labels in val_bar:
@@ -221,7 +207,6 @@ def train_model(
                 val_total += labels.size(0)
                 val_correct += (predicted == labels).sum().item()
 
-                # Update the progress bar
                 val_bar.set_postfix(
                     {
                         "loss": f"{val_loss/val_total:.4f}",
@@ -243,7 +228,7 @@ def train_model(
             torch.save(model.state_dict(), "best_female_emotion_model.pth")
             print("Saved best model")
 
-        print()  # Add an extra newline for readability between epochs
+        print()
 
 
 def predict_emotion(audio_path, model, label_encoder, max_length=10):
@@ -252,11 +237,9 @@ def predict_emotion(audio_path, model, label_encoder, max_length=10):
         logging.info(f"Predicting emotion for file: {audio_path}")
         audio, sr = torchaudio.load(audio_path)
 
-        # Resample if necessary
         if sr != 16000:
             audio = torchaudio.transforms.Resample(sr, 16000)(audio)
 
-        # Ensure consistent length
         if audio.shape[1] > 16000 * max_length:
             audio = audio[:, : 16000 * max_length]
         else:
@@ -264,7 +247,6 @@ def predict_emotion(audio_path, model, label_encoder, max_length=10):
                 audio, (0, 16000 * max_length - audio.shape[1])
             )
 
-        # Extract MFCC features
         mfcc_transform = torchaudio.transforms.MFCC(
             sample_rate=16000, n_mfcc=40, melkwargs={"n_mels": 80}
         )
@@ -289,13 +271,12 @@ def main():
     try:
         print("Starting main function")
 
-        BASE_PATH = ""  # Adjust this to your local data directory
-        CACHE_DIR = "cache"  # Adjust this to your local cache directory
+        BASE_PATH = ""
+        CACHE_DIR = "cache"
 
         print(f"BASE_PATH: {BASE_PATH}")
         print(f"CACHE_DIR: {CACHE_DIR}")
 
-        # Create dataset
         csv_path = os.path.join(BASE_PATH, "Data_path.csv")
         print(f"CSV path: {csv_path}")
         print("Creating AudioDataset")
@@ -314,7 +295,6 @@ def main():
 
         print(f"Total samples in dataset: {len(dataset)}")
 
-        # Create dataloaders
         print("Splitting data into train and validation sets")
         train_indices, val_indices = train_test_split(
             range(len(dataset)),
@@ -334,14 +314,12 @@ def main():
             val_dataset, batch_size=32, shuffle=False, num_workers=4
         )
 
-        # Create model
         print("Creating model")
-        input_dim = 40  # Number of MFCC features
+        input_dim = 40
         hidden_dim = 128
         num_classes = len(dataset.label_encoder.classes_)
         model = EmotionClassifier(input_dim, hidden_dim, num_classes).to(device)
 
-        # Define loss function and optimizer
         print("Defining loss function and optimizer")
         criterion = nn.CrossEntropyLoss()
         optimizer = Adam(model.parameters(), lr=0.001)
@@ -349,7 +327,6 @@ def main():
             optimizer, mode="min", factor=0.2, patience=5, min_lr=1e-6
         )
 
-        # Train the model
         print("Starting model training")
         train_model(
             model,
@@ -361,13 +338,11 @@ def main():
             num_epochs=50,
         )
 
-        # Load best model for prediction
         best_model_path = "best_female_emotion_model.pth"
         print(f"Loading best model from: {best_model_path}")
         model.load_state_dict(torch.load(best_model_path))
         model.eval()
 
-        # Test on multiple files
         test_folder = os.path.join(BASE_PATH, "ALL")
         print(f"Test folder: {test_folder}")
         if not os.path.exists(test_folder):
@@ -375,7 +350,7 @@ def main():
             return
 
         print(f"Testing model on audio files in {test_folder}")
-        for audio_file in os.listdir(test_folder)[:10]:  # Test on first 10 files
+        for audio_file in os.listdir(test_folder)[:10]:
             audio_path = os.path.join(test_folder, audio_file)
             predicted_emotion, confidence = predict_emotion(
                 audio_path, model, dataset.label_encoder
