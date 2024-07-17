@@ -9,7 +9,6 @@ import st_audiorec
 import random
 
 
-# Define the EmotionClassifier class (make sure this matches your model definition)
 class EmotionClassifier(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_classes):
         super().__init__()
@@ -26,12 +25,11 @@ class EmotionClassifier(nn.Module):
 
 @st.cache_resource
 def load_model():
-    input_dim = 40  # Number of MFCC features
+    input_dim = 40
     hidden_dim = 128
-    num_classes = 7  # Update this based on your number of emotion classes
+    num_classes = 7
     model = EmotionClassifier(input_dim, hidden_dim, num_classes)
 
-    # Load the trained weights
     model.load_state_dict(
         torch.load("best_female_emotion_model.pth", map_location=torch.device("cpu"))
     )
@@ -59,13 +57,12 @@ def preprocess_audio(audio_file, max_length=10):
 
 
 def is_female_voice():
-    # Randomly decide if it's a female voice
     return random.choice([True, False])
 
 
 def predict_emotion(model, audio_file):
     processed_audio = preprocess_audio(audio_file)
-    processed_audio = processed_audio.unsqueeze(0)  # Add batch dimension
+    processed_audio = processed_audio.unsqueeze(0)
     with torch.no_grad():
         prediction = model(processed_audio)
     return prediction
@@ -87,7 +84,7 @@ def main():
         "sad",
         "disgust",
         "surprise",
-    ]  # Update based on your classes
+    ]
 
     if option == "Upload an audio file":
         uploaded_file = st.file_uploader("Upload an audio file", type=["wav"])
