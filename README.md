@@ -1,6 +1,10 @@
 ## Emotion Recognition from Audio
 This Streamlit application enables emotion prediction from audio files, specifically designed for female voices. Users can either upload existing WAV files or record new audio clips directly through the interface. The application preprocesses the audio using MFCC features and applies a pre-trained deep learning model to predict emotions such as happiness, sadness, surprise, and more.
 
+## Install the repository using: 
+
+`gh repo clone Raghav-Kochhar/Emotion-Detection-Through-Audio`
+
 ### Install dependencies:
 
 Pip: `pip install -r pip_env.txt`
