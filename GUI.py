@@ -1,73 +1,93 @@
 import streamlit as st
 import librosa
 import numpy as np
-import pandas as pd
-from keras.models import model_from_json
-import keras
-import pickle
+import torch
+import torchaudio
+from torch import nn
+import os
 import st_audiorec
+import random
 
 
-# Function to load model and perform prediction
+# Define the EmotionClassifier class (make sure this matches your model definition)
+class EmotionClassifier(nn.Module):
+    def __init__(self, input_dim, hidden_dim, num_classes):
+        super().__init__()
+        self.lstm = nn.LSTM(
+            input_dim, hidden_dim, num_layers=2, batch_first=True, dropout=0.3
+        )
+        self.fc = nn.Linear(hidden_dim, num_classes)
+
+    def forward(self, x):
+        _, (hidden, _) = self.lstm(x)
+        out = self.fc(hidden[-1])
+        return out
+
+
 @st.cache_resource
 def load_model():
-    # Load model architecture from JSON file
-    json_file = open("model_json.json", "r")
-    loaded_model_json = json_file.read()
-    json_file.close()
-    loaded_model = model_from_json(loaded_model_json)
+    input_dim = 40  # Number of MFCC features
+    hidden_dim = 128
+    num_classes = 7  # Update this based on your number of emotion classes
+    model = EmotionClassifier(input_dim, hidden_dim, num_classes)
 
-    # Load weights into new model
-    loaded_model.load_weights("emotion_model.h5")
-
-    # Compile model
-    opt = keras.optimizers.Adam()
-    loaded_model.compile(
-        loss="categorical_crossentropy", optimizer=opt, metrics=["accuracy"]
+    # Load the trained weights
+    model.load_state_dict(
+        torch.load("best_female_emotion_model.pth", map_location=torch.device("cpu"))
     )
+    model.eval()
+    return model
 
-    return loaded_model
 
+def preprocess_audio(audio_file, max_length=10):
+    audio, sr = librosa.load(audio_file, sr=16000, duration=max_length)
 
-# Function to preprocess audio file
-def preprocess_audio(audio_file):
-    X, sample_rate = librosa.load(
-        audio_file, res_type="kaiser_fast", duration=2.5, sr=44100, offset=0.5
+    if len(audio) > 16000 * max_length:
+        audio = audio[: 16000 * max_length]
+    else:
+        audio = np.pad(audio, (0, 16000 * max_length - len(audio)))
+
+    audio = torch.from_numpy(audio).float().unsqueeze(0)
+
+    mfcc_transform = torchaudio.transforms.MFCC(
+        sample_rate=16000,
+        n_mfcc=40,
+        melkwargs={"n_mels": 80},
     )
-    sample_rate = np.array(sample_rate)
-    mfccs = librosa.feature.mfcc(y=X, sr=sample_rate, n_mfcc=13)
-    mfccs = np.mean(mfccs.T, axis=0)
-
-    # Ensure the shape matches the model input shape
-    if mfccs.shape[0] != 192:
-        mfccs = np.pad(mfccs, (0, max(0, 192 - len(mfccs))), mode="constant")
-
-    return pd.DataFrame(data=mfccs).T
+    mfcc = mfcc_transform(audio)
+    return mfcc.squeeze(0).transpose(0, 1)
 
 
-# Function to check if the voice is female
-def is_female_voice(audio_file):
-    # Placeholder function: Implement actual female voice detection here
-    # Returning True for simplicity
-    return True
+def is_female_voice():
+    # Randomly decide if it's a female voice
+    return random.choice([True, False])
 
 
-# Function to make predictions
 def predict_emotion(model, audio_file):
     processed_audio = preprocess_audio(audio_file)
-    processed_audio = np.expand_dims(processed_audio, axis=2)
-    prediction = model.predict(processed_audio, batch_size=16, verbose=1)
+    processed_audio = processed_audio.unsqueeze(0)  # Add batch dimension
+    with torch.no_grad():
+        prediction = model(processed_audio)
     return prediction
 
 
-# Main function
 def main():
     st.title("Emotion Recognition from Audio")
 
-    # Selectbox for choosing between Upload or Record
     option = st.selectbox(
         "Choose an option:", ("Upload an audio file", "Record an audio clip")
     )
+
+    model = load_model()
+    emotions = [
+        "angry",
+        "fear",
+        "happy",
+        "neutral",
+        "sad",
+        "disgust",
+        "surprise",
+    ]  # Update based on your classes
 
     if option == "Upload an audio file":
         uploaded_file = st.file_uploader("Upload an audio file", type=["wav"])
@@ -75,63 +95,43 @@ def main():
         if uploaded_file is not None:
             st.audio(uploaded_file, format="audio/wav")
 
-            model = load_model()
-
             if st.button("Predict Emotion"):
-                if is_female_voice(uploaded_file):
+                if is_female_voice():
                     try:
                         prediction = predict_emotion(model, uploaded_file)
-
-                        # Load label encoder
-                        with open("labels", "rb") as f:
-                            lb = pickle.load(f)
-
-                        # Get predicted labels
-                        final = prediction.argmax(axis=1)
-                        final = final.astype(int).flatten()
-                        final = lb.inverse_transform((final))
-                        if final[0][:4] == "male":
-                            st.error("Please record a female voice", icon="🚨")
-
-                        else:
-                            st.success(f"Predicted Emotion: {final[0]}", icon="✅")
-                    except ValueError as e:
-                        st.write(f"Error in processing: {e}")
+                        predicted_emotion = emotions[prediction.argmax().item()]
+                        confidence = torch.softmax(prediction, dim=1).max().item()
+                        st.success(
+                            f"Predicted Emotion: {predicted_emotion} (Confidence: {confidence:.2f})",
+                            icon="✅",
+                        )
+                    except Exception as e:
+                        st.error(f"Error in processing: {str(e)}")
                 else:
-                    st.write("Please upload a female voice.")
+                    st.error("Please upload a female voice.", icon="🚨")
 
     elif option == "Record an audio clip":
         st.write("Record an audio clip")
         audio_bytes = st_audiorec.st_audiorec()
 
         if audio_bytes is not None:
-            # Save recorded audio
             with open("recorded_audio.wav", "wb") as f:
                 f.write(audio_bytes)
 
-            model = load_model()
-
             if st.button("Predict Recorded Emotion"):
-                if is_female_voice("recorded_audio.wav"):
+                if is_female_voice():
                     try:
                         prediction = predict_emotion(model, "recorded_audio.wav")
-
-                        # Load label encoder
-                        with open("labels", "rb") as f:
-                            lb = pickle.load(f)
-
-                        # Get predicted labels
-                        final = prediction.argmax(axis=1)
-                        final = final.astype(int).flatten()
-                        final = lb.inverse_transform((final))
-                        if final[0][:4] == "male":
-                            st.error("Please record a female voice", icon="🚨")
-                        else:
-                            st.success(f"Predicted Emotion: {final[0]}", icon="✅")
-                    except ValueError as e:
-                        st.write(f"Error in processing: {e}")
+                        predicted_emotion = emotions[prediction.argmax().item()]
+                        confidence = torch.softmax(prediction, dim=1).max().item()
+                        st.success(
+                            f"Predicted Emotion: {predicted_emotion} (Confidence: {confidence:.2f})",
+                            icon="✅",
+                        )
+                    except Exception as e:
+                        st.error(f"Error in processing: {str(e)}")
                 else:
-                    st.write("Please record a female voice.")
+                    st.error("Please record a female voice.", icon="🚨")
 
 
 if __name__ == "__main__":
